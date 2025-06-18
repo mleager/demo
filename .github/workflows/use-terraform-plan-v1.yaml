@@ -10,7 +10,7 @@ on:
 
 jobs:
   call-terraform-plan:
-    uses: ./terraform-plan-v1.yaml
+    uses: ./.github/workflows/terraform-plan-v1.yaml
     with:
       working-directory: './terraform'
       tf-version: '1.12.1'

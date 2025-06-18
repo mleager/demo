@@ -10,7 +10,7 @@ name: Use Reusable Terraform Apply
 
 jobs:
   call-terraform-apply:
-    uses: ~/Mentor/Trello/0-Workflows/reusable/apply/terraform-apply-v1.yaml
+    uses: ./.github/workflows/terraform-apply-v1.yaml
     with:
       working-directory: ../terraform
       tf-version: '1.21.1'
