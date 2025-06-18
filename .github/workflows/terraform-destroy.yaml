@@ -10,6 +10,7 @@ on:
 env:
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_REGION: ${{ vars.AWS_REGION }}
   CONFIG_DIRECTORY: ./terraform
   TF_VERSION: 1.12.1
 
@@ -38,7 +39,8 @@ jobs:
       id: destroy
       run: |
         terraform destroy -var-file=terraform.tfvars.development -auto-approve | tee destroy_output.txt
-        echo "::set-output name=exit_code::$?"
+        # echo "::set-output name=exit_code::$?"
+        echo "exit_code=$?" >> $GITHUB_OUTPUT
 
     - name: Process Destroy Output
       if: github.event.inputs.confirm_destroy == 'DESTROY'
