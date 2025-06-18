@@ -8,7 +8,7 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-east-1"
+  region = var.region
 }
 
 data "aws_ami" "al2023" {
@@ -29,9 +29,6 @@ data "aws_ami" "al2023" {
 
 resource "aws_instance" "web" {
   ami           = data.aws_ami.al2023.id
-  instance_type = "t2.micro"
-
-  tags = {
-    Name = "HelloWorld"
-  }
+  instance_type = var.instance_type
 }
+
