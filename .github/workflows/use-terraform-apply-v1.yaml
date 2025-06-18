@@ -1,0 +1,21 @@
+name: Use Reusable Terraform Apply
+
+# on:
+#   push:
+#     branches:
+#     - main
+#     paths:
+#     - 'terraform/**'
+#     - '.github/workflows/use-terraform-apply-v1.yaml'
+
+jobs:
+  call-terraform-apply:
+    uses: ~/Mentor/Trello/0-Workflows/reusable/apply/terraform-apply-v1.yaml
+    with:
+      working-directory: ../terraform
+      tf-version: '1.21.1'
+      tf-vars-file: 'terraform.tfvars.development'
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+

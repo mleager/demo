@@ -1,0 +1,21 @@
+name: Use Reusable Terraform Plan
+
+on:
+  push:
+    branches:
+    - main
+    # paths:
+    # - '**/terraform/**'
+    # - '.github/workflows/terraform-plan-v1.yml'
+
+jobs:
+  call-terraform-plan:
+    uses: ./terraform-plan-v1.yaml
+    with:
+      working-directory: './terraform'
+      tf-version: '1.12.1'
+      tf-vars-file: 'terraform.tfvars.development'
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
