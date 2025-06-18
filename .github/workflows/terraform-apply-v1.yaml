@@ -100,8 +100,8 @@ jobs:
             \`\`\`
             </details>`
           })
-        env:
-          SUMMARY: ${{ steps.apply-output.outputs.summary }}
+        # env:
+        #   SUMMARY: ${{ steps.apply-output.outputs.summary }}
 
     - name: Check Terraform Apply Status
       if: steps.apply.outcome != 'success'

@@ -1,0 +1,90 @@
+name: Terraform Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_destroy:
+        description: 'Type "DESTROY" to confirm resource destruction'
+        required: true
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  CONFIG_DIRECTORY: ./terraform
+  TF_VERSION: 1.12.1
+
+jobs:
+  terraform:
+    name: 'Terraform Destroy'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.CONFIG_DIRECTORY }}
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v1
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Terraform Init
+      run: terraform init
+
+    - name: Terraform Destroy
+      if: github.event.inputs.confirm_destroy == 'DESTROY'
+      id: destroy
+      run: |
+        terraform destroy -var-file=terraform.tfvars.development -auto-approve | tee destroy_output.txt
+        echo "::set-output name=exit_code::$?"
+
+    - name: Process Destroy Output
+      if: github.event.inputs.confirm_destroy == 'DESTROY'
+      id: destroy-output
+      run: |
+        SUMMARY=$(grep -A5 "Destroy complete!" destroy_output.txt | tail -n +2)
+        SUMMARY="${SUMMARY//'%'/'%25'}"
+        SUMMARY="${SUMMARY//$'\n'/'%0A'}"
+        SUMMARY="${SUMMARY//$'\r'/'%0D'}"
+        # echo "::set-output name=summary::$SUMMARY"
+        echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
+
+    - name: Create GitHub Commit Comment
+      if: github.event.inputs.confirm_destroy == 'DESTROY'
+      uses: actions/github-script@v6
+      with:
+        # github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const summary = process.env.SUMMARY;
+          const exitCode = process.env.EXIT_CODE;
+          const status = exitCode === '0' ? '✅ Success' : '❌ Failure';
+
+          github.rest.repos.createCommitComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            commit_sha: context.sha,
+            body: `### Terraform Destroy: ${status}
+
+            <details><summary>Show Destroy Summary</summary>
+
+            \`\`\`
+            ${summary}
+            \`\`\`
+            </details>`
+          })
+      env:
+        SUMMARY: ${{ steps.destroy-output.outputs.summary }}
+        EXIT_CODE: ${{ steps.destroy.outputs.exit_code }}
+
+    - name: Check Terraform Destroy Status
+      if: github.event.inputs.confirm_destroy == 'DESTROY' && steps.destroy.outputs.exit_code != 0
+      run: exit 1
+
+    - name: Destroy Not Confirmed
+      if: github.event.inputs.confirm_destroy != 'DESTROY'
+      run: |
+        echo "Destroy action was not confirmed. To destroy resources, you must type DESTROY in the confirmation input."
+        exit 1
+
