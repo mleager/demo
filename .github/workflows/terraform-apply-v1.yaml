@@ -3,30 +3,47 @@ name: Terraform Apply
 on:
   workflow_call:
     inputs:
-      working-directory:
+      environment:
         required: true
         type: string
+        default: 'development'
+        description: 'Environment for the deployment (development, staging, production)'
+      region:
+        required: false
+        type: string
+        default: 'us-east-1'
+        description: 'AWS region for the deployment'
+      working-directory:
+        required: false
+        type: string
+        default: ./terraform
         description: 'Working directory for Terraform configuration files'
       tf-version:
         required: false
         type: string
         default: '1.12.1'
         description: 'Terraform version to use'
-      tf-vars-file:
+      tf-vars-override:
         required: false
         type: string
-        default: 'terraform.tfvars.development'
-        description: 'Terraform variables file'
+        default: ''
+        description: 'Optional: Override default var file (use with caution)'
     secrets:
-      AWS_ACCESS_KEY_ID:
+      oidc_role:
         required: true
-      AWS_SECRET_ACCESS_KEY:
+        type: string
+      github_token:
         required: true
+        type: string
+      # aws_access_key:
+      #   required: false
+      # aws_secret_access_key:
+      #   required: false
 
 jobs:
-  terraform:
-    name: 'Terraform Apply'
+  terraform-apply:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -43,9 +60,34 @@ jobs:
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v1
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ vars.AWS_REGION }}
+        role-to-assume: ${{ secrets.oidc_role }}
+        aws-region: ${{ inputs.region }}
+
+    - name: Validate Environment
+      run: |
+        VALID_ENVS=("development" "staging" "production")
+        if [[ ! "${VALID_ENVS[@]}" =~ "${{ inputs.environment }}" ]]; then
+          echo "Invalid environment. Must be one of: ${VALID_ENVS[*]}"
+          exit 1
+        fi
+
+    - name: Set Variables File
+      id: set-vars-file
+      run: |
+        if [[ -n "${{ inputs.tf-vars-override }}" ]]; then
+          VARS_FILE="${{ inputs.tf-vars-override }}"
+          echo "Using variables file: $VARS_FILE"
+        else
+          VARS_FILE="terraform.tfvars.${{ inputs.environment }}"
+          echo "Using default variables file: $VARS_FILE"
+        fi
+
+        if [[ -f "$VARS_FILE" ]]; then
+          echo "Error: Variables file not found."
+          exit 1
+        fi
+
+        echo "vars-file=$VARS_FILE" >> $GITHUB_OUTPUT
 
     - name: Terraform Format
       run: terraform fmt -check
@@ -56,9 +98,9 @@ jobs:
     - name: Terraform Validate
       run: terraform validate
 
-    - name: Terraform Plan
+    - name: Terraform Plan (using variables file)
       id: plan
-      run: terraform plan -var-file=${{ inputs.tf-vars-file }} -out=tfplan
+      run: terraform plan -var-file=${{ steps.outputs.set-vars-file.outputs.vars-file }} -out=tfplan
       continue-on-error: true
 
     - name: Terraform Plan Status
@@ -90,6 +132,7 @@ jobs:
       env:
         SUMMARY: ${{ steps.apply-output.outputs.summary }}
       with:
+        github-token: ${{ secrets.github_token }}
         script: |
           const summary = process.env.SUMMARY;
           const status = '${{ steps.apply.outputs.apply_status }}' === 'success'? '✅ Success' : '❌ Failure';

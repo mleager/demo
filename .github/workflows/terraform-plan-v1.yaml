@@ -3,6 +3,16 @@ name: Terraform Plan
 on:
   workflow_call:
     inputs:
+      environment:
+        required: true
+        default: 'development'
+        type: string
+        description: "Environment for which the plan is being generated."
+      region:
+        required: false
+        default: 'us-east-1'
+        type: string
+        description: "AWS region."
       working-directory:
         required: true
         type: string
@@ -12,20 +22,29 @@ on:
         type: string
         default: '1.12.1'
         description: "Terraform version to use."
-      tf-vars-file:
+      tf-vars-override:
         required: false
         type: string
-        default: 'terraform.tfvars.development'
-        description: "Path to the Terraform variables file."
+        default: ''
+        description: 'Optional: Override default var file (use with caution)'
     secrets:
-      AWS_ACCESS_KEY_ID:
+      oidc_role:
+        required: false
+        type: string
+      github_token:
         required: true
-      AWS_SECRET_ACCESS_KEY:
-        required: true
+        type: string
+      # aws_access_key:
+      #   required: false
+      #   type: string
+      # aws_secret_access_key:
+      #   required: false
+      #   type: string
 
 jobs:
-  terraform:
+  terraform-plan:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -42,9 +61,34 @@ jobs:
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v1
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ vars.AWS_REGION }}
+        role-to-assume: ${{ secrets.oidc_role }}
+        aws-region: ${{ inputs.region }}
+
+    - name: Validate Environment
+      run: |
+        VALID_ENVS=("development" "staging" "production")
+        if [[ ! "${VALID_ENVS[@]}" =~ "${{ inputs.environment }}" ]]; then
+          echo "Invalid environment. Valid environments are: ${VALID_ENVS[*]}"
+          exit 1
+        fi
+
+    - name: Set Variables File
+      id: set-vars-file
+      run: |
+        if [[ -n "${{ inputs.tf-vars-override }}" ]]; then
+          VARS_FILE="${{ inputs.tf-vars-override }}"
+          echo "Using override variables file: $VARS_FILE"
+        else
+          VARS_FILE="terraform.tfvars.${{ inputs.environment }}"
+          echo "Using default variables file: $VARS_FILE"
+        fi
+
+        if [[ -f "$VARS_FILE" ]]; then
+          echo "Variables file not found"
+          exit 1
+        fi
+
+        echo "vars-file=$VARS_FILE" >> $GITHUB_OUTPUT
 
     - name: Terraform Format
       run: terraform fmt -check
@@ -56,7 +100,7 @@ jobs:
       run: terraform validate
 
     - name: Terraform Plan
-      run: terraform plan -var-file=${{ inputs.tf-vars-file }} -out=tfplan
+      run: terraform plan -var-file=${{ steps.set-vars-file.outputs.vars-file }} -out=tfplan
       continue-on-error: true
 
     - name: Get Plan Output
@@ -66,7 +110,6 @@ jobs:
         PLAN_OUTPUT="${PLAN_OUTPUT//'%'/'%25'}"
         PLAN_OUTPUT="${PLAN_OUTPUT//$'\n'/'%0A'}"
         PLAN_OUTPUT="${PLAN_OUTPUT//$'\r'/'%0D'}"
-        # echo "::set-output name=plan::$PLAN_OUTPUT"
         echo "name=$PLAN_OUTPUT" >> $GITHUB_OUTPUT
 
     - name: Update PR
@@ -75,7 +118,7 @@ jobs:
       env:
         PLAN: "${{ steps.plan-output.outputs.plan }}"
       with:
-        # github-token: ${{ secrets.GITHUB_TOKEN }}
+        github-token: ${{ secrets.github_token }}
         script: |
           // Get existing bot comments for the PR
           const { data: comments } = await github.rest.issues.listComments({

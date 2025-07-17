@@ -12,10 +12,8 @@ jobs:
   call-terraform-plan:
     uses: ./.github/workflows/terraform-plan-v1.yaml
     with:
-      working-directory: './terraform'
-      tf-version: '1.12.1'
-      tf-vars-file: 'terraform.tfvars.development'
+      environment: development
+      region: us-east-1
     secrets:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      oidc_role: ${{ secrets.OIDC_ROLE_ARN }}
 
