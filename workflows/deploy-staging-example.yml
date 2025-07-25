@@ -1,0 +1,46 @@
+name: Staging Deployment Example
+
+on:
+  push:
+    branches:
+      - staging
+
+  pull_request:
+    branches:
+      - main
+
+env:
+  ENVIRONMENT: staging
+
+jobs:
+  deploy-staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.OIDC_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Deploy to Staging
+        run: |
+          terraform init
+          terraform apply -auto-approve \
+            -var-file=terraform.tfvars.${{ env.ENVIRONMENT  }}
+
+  integration-tests:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Run Integration Tests
+        run: |
+          echo "Running integration tests against staging environment"
+          # curl tests, API tests, etc.
+
