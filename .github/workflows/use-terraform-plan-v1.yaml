@@ -1,12 +1,14 @@
-name: Use Reusable Terraform Plan
+name: Call Reusable Terraform Plan Workflow
 
 on:
   push:
     branches:
     - main
-    # paths:
-    # - '**/terraform/**'
-    # - '.github/workflows/terraform-plan-v1.yml'
+    paths:
+    - 'terraform/**'
+    - '.github/workflows/terraform-plan-v1.yaml'
+
+  workflow_dispatch:
 
 jobs:
   call-terraform-plan:
@@ -16,4 +18,5 @@ jobs:
       region: us-east-1
     secrets:
       oidc_role: ${{ secrets.OIDC_ROLE_ARN }}
+      github_token: ${{ secrets.GITHUB_TOKEN }}
 

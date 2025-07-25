@@ -1,12 +1,14 @@
-name: Use Reusable Terraform Apply
+name: Call Reusable Terraform Apply Workflow
 
 on:
   push:
     branches:
     - main
-#     paths:
-#     - 'terraform/**'
-#     - '.github/workflows/use-terraform-apply-v1.yaml'
+    paths:
+    - 'terraform/**'
+    - '.github/workflows/terraform-apply-v1.yaml'
+
+  workflow_dispatch:
 
 jobs:
   call-terraform-apply:
@@ -16,4 +18,5 @@ jobs:
       region: us-east-1
     secrets:
       oidc_role: ${{ secrets.OIDC_ROLE_ARN }}
+      github_token: ${{ secrets.GITHUB_TOKEN }}
 

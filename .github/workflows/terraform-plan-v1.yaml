@@ -5,41 +5,42 @@ on:
     inputs:
       environment:
         required: true
-        default: 'development'
         type: string
-        description: "Environment for which the plan is being generated."
+        default: 'development'
+        description: "Environment for which the plan is being generated. (development, staging, production)"
       region:
         required: false
+        type: string
         default: 'us-east-1'
-        type: string
-        description: "AWS region."
+        description: "AWS region for the deployment"
       working-directory:
-        required: true
+        required: false
         type: string
-        description: "Path to the Terraform directory."
+        default: './terraform'
+        description: "Path to the Terraform directory"
       tf-version:
         required: false
         type: string
         default: '1.12.1'
-        description: "Terraform version to use."
+        description: "Terraform version to use"
       tf-vars-override:
         required: false
         type: string
         default: ''
-        description: 'Optional: Override default var file (use with caution)'
+        description: "Optional: Override default var file (use with caution)"
+      make_comment:
+        required: false
+        type: boolean
+        default: true
+        description: "Show Terraform Plan Output as a Commit Comment. Defaults to true. Requires github_token"
+
     secrets:
       oidc_role:
-        required: false
-        type: string
-      github_token:
         required: true
         type: string
-      # aws_access_key:
-      #   required: false
-      #   type: string
-      # aws_secret_access_key:
-      #   required: false
-      #   type: string
+      github_token:
+        required: false
+        type: string
 
 jobs:
   terraform-plan:
@@ -84,7 +85,7 @@ jobs:
         fi
 
         if [[ -f "$VARS_FILE" ]]; then
-          echo "Variables file not found"
+          echo "Error: Variables file not found."
           exit 1
         fi
 
@@ -113,6 +114,7 @@ jobs:
         echo "name=$PLAN_OUTPUT" >> $GITHUB_OUTPUT
 
     - name: Update PR
+      if: inputs.github_token != '' || inputs.make_comment != false
       uses: actions/github-script@v6
       if: github.event_name == 'pull_request'
       env:
