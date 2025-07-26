@@ -3,30 +3,49 @@ name: Terraform Apply
 on:
   workflow_call:
     inputs:
-      working-directory:
+      environment:
         required: true
         type: string
-        description: 'Working directory for Terraform configuration files'
+        default: 'development'
+        description: "Environment for the deployment (development, staging, production)"
+      region:
+        required: false
+        type: string
+        default: 'us-east-1'
+        description: "AWS region for the deployment"
+      working-directory:
+        required: false
+        type: string
+        default: './terraform'
+        description: "Path to the Terraform directory"
       tf-version:
         required: false
         type: string
         default: '1.12.1'
-        description: 'Terraform version to use'
-      tf-vars-file:
+        description: "Terraform version to use"
+      tf-vars-override:
         required: false
         type: string
-        default: 'terraform.tfvars.development'
-        description: 'Terraform variables file'
+        default: ''
+        description: "Optional: Override default var file (use with caution)"
+      make_comment:
+        required: false
+        type: boolean
+        default: true
+        description: "Show Terraform Plan Output as a Commit Comment. Defaults to true. Requires github_token"
+
     secrets:
-      AWS_ACCESS_KEY_ID:
+      oidc_role:
         required: true
-      AWS_SECRET_ACCESS_KEY:
-        required: true
+        type: string
+      github_token:
+        required: false
+        type: string
 
 jobs:
-  terraform:
-    name: 'Terraform Apply'
+  terraform-apply:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -43,22 +62,47 @@ jobs:
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v1
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ vars.AWS_REGION }}
+        role-to-assume: ${{ secrets.oidc_role }}
+        aws-region: ${{ inputs.region }}
+
+    - name: Validate Environment
+      run: |
+        VALID_ENVS=("development" "staging" "production")
+        if [[ ! "${VALID_ENVS[@]}" =~ "${{ inputs.environment }}" ]]; then
+          echo "Invalid environment. Must be one of: ${VALID_ENVS[*]}"
+          exit 1
+        fi
+
+    - name: Set Variables File
+      id: set-vars-file
+      run: |
+        if [[ -n "${{ inputs.tf-vars-override }}" ]]; then
+          VARS_FILE="${{ inputs.tf-vars-override }}"
+          echo "Using override variables file: $VARS_FILE"
+        else
+          VARS_FILE="terraform.tfvars.${{ inputs.environment }}"
+          echo "Using default variables file: $VARS_FILE"
+        fi
+
+        if [[ -f "$VARS_FILE" ]]; then
+          echo "Error: Variables file not found."
+          exit 1
+        fi
+
+        echo "vars-file=$VARS_FILE" >> $GITHUB_OUTPUT
 
     - name: Terraform Format
       run: terraform fmt -check
 
     - name: Terraform Init
-      run: terraform init -input=false
+      run: terraform init
 
     - name: Terraform Validate
       run: terraform validate
 
     - name: Terraform Plan
       id: plan
-      run: terraform plan -var-file=${{ inputs.tf-vars-file }} -out=tfplan
+      run: terraform plan -var-file=${{ steps.set-vars-file.outputs.vars-file }} -out=tfplan
       continue-on-error: true
 
     - name: Terraform Plan Status
@@ -86,10 +130,12 @@ jobs:
         echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
 
     - name: Create Github Commit Comment
+      if: inputs.github_token != '' || inputs.make_comment != false
       uses: actions/github-script@v6
       env:
         SUMMARY: ${{ steps.apply-output.outputs.summary }}
       with:
+        github-token: ${{ secrets.github_token }}
         script: |
           const summary = process.env.SUMMARY;
           const status = '${{ steps.apply.outputs.apply_status }}' === 'success'? '✅ Success' : '❌ Failure';

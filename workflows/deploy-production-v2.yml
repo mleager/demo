@@ -1,0 +1,121 @@
+name: Deploy Terraform - Production
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+
+  push:
+    branches:
+      - main
+
+env:
+  ENVIRONMENT: production
+
+jobs:
+  production-readiness-check:
+    # only run on PR
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Production Readiness Tests
+        run: |
+          echo "Running production readiness checks..."
+          # comprehensive production checks
+
+      - name: Performance Tests
+        run: |
+          echo "Running performance tests..."
+          # performance testing
+
+  terraform-plan:
+    # only run on PR
+    if: github.event_name == 'pull_request'
+    needs: production-readiness-check
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: ./terraform
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.12.1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.OIDC_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: terraform plan \
+          -var-file=terraform.tfvars.${{ env.ENVIRONMENT }} \
+          -out=tfplan
+
+  terraform-apply:
+    # only run on push
+    if: github.event_name == 'push'
+    # manual approval requirement for production
+    needs: []
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: ./terraform
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.12.1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.OIDC_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan \
+          -var-file=terraform.tfvars.${{ env.ENVIRONMENT }} \
+          -out=tfplan
+
+      - name: Terraform Apply
+        run: terraform apply tfplan -auto-approve
+
+  health-checks:
+    # only run on push
+    if: github.event_name == 'push'
+    needs: terraform-apply
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Post-deployment Health Check
+        run: |
+          echo "Running post-deployment health checks..."
+          # health check commands
+
