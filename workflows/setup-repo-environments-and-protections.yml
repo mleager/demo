@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        branch: [main, "feature/*", "workflow/*", "development", "staging"]
+        branch: ["main", "feature/*", "workflow/*", "development", "staging"]
     steps:
       - name: Setup Branch Protection for ${{ matrix.branch }}
         run: |
